@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatGPT Image Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        gpt: {
+                            sidebar: '#171717',
+                            main: '#212121',
+                            input: '#2f2f2f',
+                            border: '#383838',
+                            hover: '#2a2a2a',
+                            text: '#ececec',
+                            mutetext: '#b4b4b4'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 隐藏滚动条但保留滚动功能 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #4a4a4a;
+            border-radius: 4px;
+        }
+        .aspect-square-card {
+            aspect-ratio: 1 / 1;
+        }
+    </style>
+</head>
+<body class="bg-gpt-main text-gpt-text h-screen flex overflow-hidden font-sans">
+
+    <!-- 侧边栏配置区 -->
+    <aside class="w-72 bg-gpt-sidebar border-r border-gpt-border flex flex-col p-4 overflow-y-auto shrink-0">
+        <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
+            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+            画图配置
+        </h2>
+
+        <!-- API设置 -->
+        <div class="space-y-4 mb-6">
+            <h3 class="text-sm font-medium text-gpt-mutetext uppercase tracking-wider">接口配置</h3>
+            
+            <div class="flex flex-col gap-1">
+                <label class="text-sm">Base URL</label>
+                <input type="text" id="baseUrl" placeholder="https://api.example.com" class="bg-gpt-input border border-gpt-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 transition-colors">
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <label class="text-sm">API Key</label>
+                <input type="password" id="apiKey" placeholder="sk-..." class="bg-gpt-input border border-gpt-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 transition-colors">
+            </div>
+            
+            <div class="flex flex-col gap-1">
+                <label class="text-sm">模型 (Model)</label>
+                <input type="text" id="model" value="gpt-image-2" class="bg-gpt-input border border-gpt-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 transition-colors">
+            </div>
+        </div>
+
+        <div class="w-full h-px bg-gpt-border mb-6"></div>
+
+        <!-- 生成参数设置 -->
+        <div class="space-y-4">
+            <h3 class="text-sm font-medium text-gpt-mutetext uppercase tracking-wider">生成参数</h3>
+
+            <div class="flex flex-col gap-1">
+                <label class="text-sm">生成模式</label>
+                <select id="mode" class="bg-gpt-input border border-gpt-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 transition-colors" onchange="toggleMode()">
+                    <option value="t2i">文生图 (Text to Image)</option>
+                    <option value="i2i">图生图 (Image to Image)</option>
+                </select>
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <label class="text-sm">生成数量</label>
+                <select id="count" class="bg-gpt-input border border-gpt-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 transition-colors">
+                    <option value="1">1 张</option>
+                    <option value="2">2 张</option>
+                    <option value="4">4 张</option>
+                    <option value="6">6 张</option>
+                </select>
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <label class="text-sm">图片尺寸</label>
+                <select id="size" class="bg-gpt-input border border-gpt-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 transition-colors">
+                    <option value="1024x1024">1024 x 1024 (1:1)</option>
+                    <option value="1536x1024">1536 x 1024 (宽图)</option>
+                    <option value="1024x1536">1024 x 1536 (长图)</option>
+                </select>
+            </div>
+
+            <div class="flex flex-col gap-1" id="qualityContainer">
+                <label class="text-sm">图像质量</label>
+                <select id="quality" class="bg-gpt-input border border-gpt-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 transition-colors">
+                    <option value="auto">Auto</option>
+                    <option value="high" selected>High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 主展示区 -->
+    <main class="flex-1 flex flex-col relative h-full">
+        <!-- 头部导航栏 -->
+        <header class="h-14 border-b border-gpt-border flex items-center px-4 shrink-0">
+            <h1 class="text-lg font-medium">Image Generation Studio</h1>
+        </header>
+
+        <!-- 画廊区域 -->
+        <div id="gallery" class="flex-1 overflow-y-auto p-6 flex flex-col items-center">
+            <div id="galleryGrid" class="w-full max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                <!-- 生成的图片会动态插入这里 -->
+            </div>
+            <!-- 空状态提示 -->
+            <div id="emptyState" class="m-auto flex flex-col items-center justify-center text-gpt-mutetext mt-32">
+                <svg class="w-16 h-16 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                <p>在底部输入描述以开始生成图片</p>
+            </div>
+        </div>
+
+        <!-- 底部输入区 -->
+        <div class="p-4 pt-0 shrink-0 flex justify-center w-full">
+            <div class="w-full max-w-4xl bg-gpt-input border border-gpt-border rounded-xl p-3 flex flex-col gap-3 relative shadow-lg">
+                <!-- 图生图上传区 (默认隐藏) -->
+                <div id="imageUploadArea" class="hidden">
+                    <div class="border-2 border-dashed border-gpt-border rounded-lg p-4 text-center hover:border-gpt-mutetext transition-colors cursor-pointer" onclick="document.getElementById('referenceImage').click()">
+                        <input type="file" id="referenceImage" accept="image/*" class="hidden" onchange="previewImage(event)">
+                        <div id="uploadPlaceholder" class="flex flex-col items-center gap-2">
+                            <svg class="w-6 h-6 text-gpt-mutetext" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                            <span class="text-sm text-gpt-mutetext">点击上传参考图 (必选)</span>
+                        </div>
+                        <img id="imagePreview" class="hidden h-24 mx-auto rounded object-cover" />
+                    </div>
+                </div>
+
+                <!-- 文本输入区 -->
+                <div class="flex items-end gap-2">
+                    <textarea id="prompt" rows="2" class="flex-1 bg-transparent border-none resize-none focus:outline-none text-gpt-text p-2" placeholder="描述你想要生成的图片..."></textarea>
+                    
+                    <button id="generateBtn" onclick="startGeneration()" class="bg-white text-black p-3 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 全屏放大模态框 -->
+    <div id="imageModal" class="fixed inset-0 bg-black/90 z-50 hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <!-- 关闭按钮 -->
+        <button onclick="closeModal()" class="absolute top-6 right-6 text-white hover:text-gray-300 bg-black/50 p-2 rounded-full">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+        <!-- 图片主体 -->
+        <img id="modalImage" class="max-w-[90vw] max-h-[90vh] object-contain rounded shadow-2xl" src="" alt="Full Screen">
+    </div>
+
+    <script>
+        // DOM Elements
+        const DOM = {
+            baseUrl: document.getElementById('baseUrl'),
+            apiKey: document.getElementById('apiKey'),
+            model: document.getElementById('model'),
+            mode: document.getElementById('mode'),
+            count: document.getElementById('count'),
+            size: document.getElementById('size'),
+            quality: document.getElementById('quality'),
+            prompt: document.getElementById('prompt'),
+            generateBtn: document.getElementById('generateBtn'),
+            galleryGrid: document.getElementById('galleryGrid'),
+            emptyState: document.getElementById('emptyState'),
+            imageUploadArea: document.getElementById('imageUploadArea'),
+            referenceImage: document.getElementById('referenceImage'),
+            uploadPlaceholder: document.getElementById('uploadPlaceholder'),
+            imagePreview: document.getElementById('imagePreview'),
+            qualityContainer: document.getElementById('qualityContainer')
+        };
+
+        // 初始化加载本地配置
+        function loadConfig() {
+            DOM.baseUrl.value = localStorage.getItem('imgBaseUrl') || '';
+            DOM.apiKey.value = localStorage.getItem('imgApiKey') || '';
+            DOM.model.value = localStorage.getItem('imgModel') || 'gpt-image-2';
+        }
+
+        // 保存配置到本地
+        function saveConfig() {
+            localStorage.setItem('imgBaseUrl', DOM.baseUrl.value.trim());
+            localStorage.setItem('imgApiKey', DOM.apiKey.value.trim());
+            localStorage.setItem('imgModel', DOM.model.value.trim());
+        }
+
+        // 监听配置改变
+        DOM.baseUrl.addEventListener('input', saveConfig);
+        DOM.apiKey.addEventListener('input', saveConfig);
+        DOM.model.addEventListener('input', saveConfig);
+
+        // 切换 文生图/图生图 模式
+        function toggleMode() {
+            if (DOM.mode.value === 'i2i') {
+                DOM.imageUploadArea.classList.remove('hidden');
+                DOM.qualityContainer.classList.add('hidden'); // I2I usually doesn't take quality parameter
+            } else {
+                DOM.imageUploadArea.classList.add('hidden');
+                DOM.qualityContainer.classList.remove('hidden');
+            }
+        }
+
+        // 预览上传的图片
+        function previewImage(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    DOM.imagePreview.src = e.target.result;
+                    DOM.imagePreview.classList.remove('hidden');
+                    DOM.uploadPlaceholder.classList.add('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // 打开全屏大图
+        function openModal(src) {
+            const modal = document.getElementById('imageModal');
+            const modalImg = document.getElementById('modalImage');
+            modalImg.src = src;
+            modal.classList.remove('hidden');
+            // 延迟一点加不透明度以触发动画
+            setTimeout(() => modal.classList.remove('opacity-0'), 10);
+        }
+
+        // 关闭全屏大图
+        function closeModal() {
+            const modal = document.getElementById('imageModal');
+            modal.classList.add('opacity-0');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        // 点击遮罩关闭
+        document.getElementById('imageModal').addEventListener('click', (e) => {
+            if(e.target === document.getElementById('imageModal')) closeModal();
+        });
+
+        // Base64 下载
+        function downloadImage(base64Data) {
+            const link = document.createElement('a');
+            link.href = base64Data;
+            link.download = `image_${Date.now()}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // 创建图库占位符框架 (Loading 状态)
+        function createCardPlaceholder(id) {
+            const card = document.createElement('div');
+            card.id = id;
+            card.className = 'aspect-square-card relative group rounded-xl overflow-hidden bg-gpt-hover border border-gpt-border flex flex-col items-center justify-center text-center shadow-md';
+            
+            card.innerHTML = `
+                <!-- 骨架屏加载动画 -->
+                <div class="absolute inset-0 flex flex-col items-center justify-center bg-gpt-hover animate-pulse z-10" id="${id}-loading">
+                    <svg class="w-10 h-10 text-gpt-mutetext animate-spin mb-3" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="text-sm text-gpt-mutetext">正在生成中...</span>
+                </div>
+            `;
+            DOM.galleryGrid.prepend(card);
+            return card;
+        }
+
+        // 成功渲染图片
+        function renderSuccess(id, base64Str) {
+            const card = document.getElementById(id);
+            const imgSrc = `data:image/png;base64,${base64Str}`;
+            
+            card.innerHTML = `
+                <img src="${imgSrc}" class="w-full h-full object-cover cursor-pointer" onclick="openModal('${imgSrc}')" alt="Generated Image"/>
+                
+                <!-- 悬浮操作层 -->
+                <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-4">
+                    <button onclick="openModal('${imgSrc}')" class="bg-white/20 hover:bg-white/40 text-white rounded-full p-3 transition-colors backdrop-blur-sm" title="放大">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path></svg>
+                    </button>
+                    <button onclick="downloadImage('${imgSrc}')" class="bg-white/20 hover:bg-white/40 text-white rounded-full p-3 transition-colors backdrop-blur-sm" title="下载">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    </button>
+                </div>
+            `;
+        }
+
+        // 渲染错误信息
+        function renderError(id, errMsg) {
+            const card = document.getElementById(id);
+            card.innerHTML = `
+                <div class="p-6 flex flex-col items-center justify-center text-center text-red-400">
+                    <svg class="w-12 h-12 mb-3 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                    <p class="text-sm break-words line-clamp-4 w-full">${errMsg}</p>
+                </div>
+            `;
+            card.classList.add('border-red-500/50', 'bg-red-500/10');
+        }
+
+        // 核心API调用函数 (针对单张图片)
+        async function fetchImageAPI(cardId) {
+            const baseUrl = DOM.baseUrl.value.trim().replace(/\/+$/, ""); // 移除末尾斜杠
+            const apiKey = DOM.apiKey.value.trim();
+            const model = DOM.model.value.trim() || 'gpt-image-2';
+            const prompt = DOM.prompt.value.trim();
+            const mode = DOM.mode.value;
+            const size = DOM.size.value;
+            const quality = DOM.quality.value;
+
+            try {
+                let response;
+
+                // 文生图请求
+                if (mode === 't2i') {
+                    const payload = {
+                        model: model,
+                        prompt: prompt,
+                        n: 1, // 永远传1
+                        size: size,
+                        quality: quality
+                    };
+
+                    response = await fetch(`${baseUrl}/v1/images/generations`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${apiKey}`
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                } 
+                // 图生图请求
+                else {
+                    const file = DOM.referenceImage.files[0];
+                    if (!file) throw new Error("图生图模式必须上传参考图片");
+
+                    const formData = new FormData();
+                    formData.append('model', model);
+                    formData.append('prompt', prompt);
+                    formData.append('n', "1"); // 传字符串"1"
+                    formData.append('size', size);
+                    formData.append('image', file);
+
+                    response = await fetch(`${baseUrl}/v1/images/edits`, {
+                        method: 'POST',
+                        headers: {
+                            // Fetch API 会自动处理 FormData 的 Content-Type 并带上 boundary
+                            'Authorization': `Bearer ${apiKey}`
+                        },
+                        body: formData
+                    });
+                }
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error?.message || `HTTP error! status: ${response.status}`);
+                }
+
+                if (data.data && data.data[0] && data.data[0].b64_json) {
+                    renderSuccess(cardId, data.data[0].b64_json);
+                } else {
+                    throw new Error("接口未返回 b64_json 格式的图片数据");
+                }
+
+            } catch (error) {
+                // 网络错误或其它错误
+                let errorMsg = error.message;
+                if (errorMsg === "Failed to fetch") {
+                    errorMsg = "网络异常，请检查 BaseURL 是否正确且允许跨域";
+                }
+                renderError(cardId, errorMsg);
+            }
+        }
+
+        // 启动批量生成流程
+        async function startGeneration() {
+            // 前置检查
+            const apiKey = DOM.apiKey.value.trim();
+            const baseUrl = DOM.baseUrl.value.trim();
+            const prompt = DOM.prompt.value.trim();
+            
+            if (!apiKey) {
+                alert("请先在左侧填写 API Key");
+                return;
+            }
+            if (!baseUrl) {
+                alert("请填写 BaseURL");
+                return;
+            }
+            if (!prompt) {
+                alert("请输入图片描述 (Prompt)");
+                return;
+            }
+            if (DOM.mode.value === 'i2i' && !DOM.referenceImage.files[0]) {
+                alert("图生图模式请先上传一张参考图片");
+                return;
+            }
+
+            // 锁定按钮和隐藏空状态
+            DOM.generateBtn.disabled = true;
+            DOM.emptyState.classList.add('hidden');
+            
+            const numImages = parseInt(DOM.count.value);
+            const timestamp = Date.now();
+            const promises = [];
+
+            // 生成 N 张，分别创建占位符并推入 Promise.all 数组
+            for (let i = 0; i < numImages; i++) {
+                const cardId = `img_${timestamp}_${i}`;
+                createCardPlaceholder(cardId);
+                // 执行单次请求
+                promises.push(fetchImageAPI(cardId));
+            }
+
+            // 等待所有并发请求完成 (失败也会通过 catch 在内部处理完毕不影响 Promise.all 执行)
+            await Promise.allSettled(promises);
+            
+            // 释放按钮
+            DOM.generateBtn.disabled = false;
+        }
+
+        // 监听快捷键 Enter 发送 (Shift+Enter 换行)
+        DOM.prompt.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                startGeneration();
+            }
+        });
+
+        // 页面初始化
+        loadConfig();
+    </script>
+</body>
+</html>
